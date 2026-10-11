@@ -6,9 +6,7 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-# -------------------------------------------------------------
-# 1. 抓取 MSTR 股價數據 (2024 至今)
-# -------------------------------------------------------------
+# 1. 抓取 MSTR 數據
 print("正在從 Yahoo Finance 抓取 MSTR 股價...")
 ticker = yf.Ticker("MSTR")
 df = ticker.history(start="2024-01-01")
@@ -25,9 +23,7 @@ try:
 except Exception:
   btc_current_price = 95000.0
 
-# -------------------------------------------------------------
-# 2. 歷史增發基準庫 (標準繁體中文)
-# -------------------------------------------------------------
+# 2. 歷史增發數據庫
 base_events = [
     {
         "id": "ev1",
@@ -171,9 +167,7 @@ base_events = [
     },
 ]
 
-# -------------------------------------------------------------
-# 3. 自動探測未來的 SEC 申報
-# -------------------------------------------------------------
+# 3. SEC 自動檢查
 sec_headers = {"User-Agent": "MSTR_AutoTracker investor_research@example.com"}
 existing_dates = {e["date"] for e in base_events}
 
@@ -264,9 +258,7 @@ except Exception as e:
 
 event_dict = {e["date"]: e for e in base_events}
 
-# -------------------------------------------------------------
 # 4. 組裝 K 線與 mNAV 計算
-# -------------------------------------------------------------
 candles = []
 df = df.dropna()
 closes = [float(c) for c in df["Close"]]
@@ -331,9 +323,7 @@ for i, (ts, row) in enumerate(df.iterrows()):
       "event_title": ev["title"] if ev else None,
   })
 
-# -------------------------------------------------------------
-# 5. 純淨 HTML 模板 (採用 .replace() 替換，完全杜絕語法與轉義衝突)
-# -------------------------------------------------------------
+# 5. 完整手機響應式 HTML 模板 (含四宮格按鈕、頂部看板、動態 mNAV)
 html_template = """<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -383,7 +373,7 @@ html_template = """<!DOCTYPE html>
         .btn:hover { background: #334155; color: #fff; }
         .btn.active { background: #0284c7; color: #fff; border-color: #38bdf8; }
 
-        .canvas-wrapper { position: relative; width: 100%; height: 720px; background: #070d18; border-radius: 8px; border: 1px solid #1c2b44; overflow: hidden; cursor: crosshair; user-select: none; }
+        .canvas-wrapper { position: relative; width: 100%; height: 800px; background: #070d18; border-radius: 8px; border: 1px solid #1c2b44; overflow: hidden; cursor: crosshair; user-select: none; }
         canvas { display: block; width: 100%; height: 100%; }
 
         #chartTooltip {
@@ -417,7 +407,23 @@ html_template = """<!DOCTYPE html>
         .badge-purple { background: rgba(139, 92, 246, 0.2); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.4); }
         .badge-green { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); }
         .badge-amber { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); }
-        code { background: #0b1120; padding: 2px 5px; border-radius: 4px; color: #f472b6; font-family: monospace; font-size: 12px; }
+
+        /* Mobile Layout */
+        @media (max-width: 768px) {
+            body { padding: 12px 8px; }
+            .header h1 { font-size: 18px; }
+            .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+            .stat-card { padding: 10px 12px; }
+            .stat-val { font-size: 17px; }
+            .chart-box { padding: 10px 8px; }
+            .chart-toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
+            .legend-group { font-size: 11px; gap: 8px; justify-content: center; }
+            .btn-group { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; gap: 4px; }
+            .btn { padding: 6px 2px; font-size: 11px; text-align: center; }
+            .canvas-wrapper { height: 560px; }
+            .grid-2col { grid-template-columns: 1fr; gap: 14px; }
+            .panel-card { padding: 14px 12px; }
+        }
     </style>
 </head>
 <body>
@@ -425,8 +431,8 @@ html_template = """<!DOCTYPE html>
 <div class="container">
     <div class="header">
         <div>
-            <h1>MicroStrategy (MSTR) 增發數據與全景 K 線儀表板 <span class="tag">繁體中文純淨版</span></h1>
-            <p>已整合：時間自定義縮放（1個月 / 半年 / 今年 / 全部）、滑鼠滾輪縮放、滑鼠拖曳、增發直條圖與雙軌 mNAV。</p>
+            <h1>MicroStrategy (MSTR) 增發數據與全景 K 線儀表板 <span class="tag">每日自動更新</span></h1>
+            <p>已整合：時間自定義縮放（1個月 / 半年 / 今年 / 全部）、滑鼠滾輪縮放、手機即時看板、增發直條圖與雙軌 mNAV。</p>
         </div>
         <div style="text-align: right;">
             <div style="font-size: 13px; color: #94a3b8;">最新收盤價: <strong style="color:#fff; font-size:16px;">__LATEST_PRICE__</strong></div>
@@ -478,12 +484,19 @@ html_template = """<!DOCTYPE html>
             </div>
         </div>
 
+        <!-- 手機頂部看板 -->
+        <div id="mobileInfoBar" style="background: #18243c; border: 1px solid #2b3d5d; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; font-size: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; min-height: 32px;">
+            <span id="mInfoDate" style="color: #38bdf8; font-weight: 700;">滑動圖表檢視每日數據</span>
+            <span id="mInfoPrice" style="color: #fff;"></span>
+            <span id="mInfoNav" style="color: #ec4899;"></span>
+        </div>
+
         <div class="canvas-wrapper" id="canvasWrapper">
             <canvas id="klineCanvas"></canvas>
             <div id="chartTooltip"></div>
         </div>
         <div class="hint-bar">
-            <span>💡 提示：支援<strong>滑鼠滾輪直接縮放</strong>放大/縮小，按住滑鼠左鍵可<strong>左右拖曳平移</strong>歷史走勢。</span>
+            <span>💡 提示：支援<strong>滑鼠滾輪直接縮放</strong>放大/縮小，手機端支援<strong>手指滑動看盤</strong>。</span>
             <span id="rangeLabel">當前範圍: 全部歷史</span>
         </div>
     </div>
@@ -530,6 +543,9 @@ const ctx = canvas.getContext('2d');
 const wrapper = document.getElementById('canvasWrapper');
 const tooltip = document.getElementById('chartTooltip');
 const rangeLabel = document.getElementById('rangeLabel');
+const mInfoDate = document.getElementById('mInfoDate');
+const mInfoPrice = document.getElementById('mInfoPrice');
+const mInfoNav = document.getElementById('mInfoNav');
 
 function updateViewRange(start, end) {
     viewStart = Math.max(0, Math.min(rawData.length - 5, start));
@@ -571,6 +587,36 @@ function setTimeframe(tf) {
     }
 }
 
+// 觸控事件
+function handleTouch(e) {
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const chartW = rect.width - 50;
+        const n = currentData.length;
+        const step = chartW / n;
+
+        if (x >= 5 && x <= chartW) {
+            hoveredIndex = Math.floor((x - 5) / step);
+            if (hoveredIndex >= n) hoveredIndex = n - 1;
+            if (hoveredIndex < 0) hoveredIndex = 0;
+            
+            const item = currentData[hoveredIndex];
+            const ev = events.find(evItem => evItem.date === item.date);
+            
+            mInfoDate.innerText = item.date;
+            mInfoPrice.innerHTML = '收盤: <strong style="color:' + (item.close >= item.open ? '#10b981' : '#ef4444') + '">$' + item.close.toFixed(2) + '</strong>';
+            mInfoNav.innerHTML = '新mNAV: <strong>' + item.diluted_mnav.toFixed(2) + 'x</strong>' + (ev ? ' <span style="background:' + ev.color + '; color:#fff; padding:1px 5px; border-radius:3px; font-size:10px;">' + ev.badge + '</span>' : '');
+            renderChart();
+        }
+    }
+}
+
+wrapper.addEventListener('touchstart', handleTouch, { passive: true });
+wrapper.addEventListener('touchmove', handleTouch, { passive: true });
+
+// 滾輪縮放
 wrapper.addEventListener('wheel', function(e) {
     e.preventDefault();
     const zoomFactor = e.deltaY > 0 ? 1.15 : 0.85;
@@ -590,6 +636,7 @@ wrapper.addEventListener('wheel', function(e) {
     updateViewRange(newStart, newEnd);
 }, { passive: false });
 
+// 拖曳平移
 let isDragging = false;
 let dragStartX = 0;
 let dragStartViewStart = 0;
@@ -659,6 +706,7 @@ wrapper.addEventListener('mouseleave', function() {
 });
 
 function showTooltipAt(idx, mouseX, mouseY) {
+    if (window.innerWidth <= 768) return; // 手機端使用頂部看板
     const item = currentData[idx];
     const ev = events.find(e => e.date === item.date);
     
@@ -709,9 +757,9 @@ function renderChart() {
     const chartRight = width - 65;
     const chartWidth = chartRight - chartLeft;
 
-    const p1Top = 20, p1H = height * 0.44;
-    const p2Top = p1Top + p1H + 25, p2H = height * 0.18;
-    const p3Top = p2Top + p2H + 25, p3H = height * 0.18;
+    const p1Top = 20, p1H = height * 0.42;
+    const p2Top = p1Top + p1H + 22, p2H = height * 0.16;
+    const p3Top = p2Top + p2H + 22, p3H = height * 0.25;
     const xAxisY = p3Top + p3H + 18;
 
     const n = currentData.length;
@@ -730,7 +778,7 @@ function renderChart() {
     const step = chartWidth / n;
     const candleWidth = Math.max(2, Math.min(22, step * 0.7));
 
-    // Panel 1: K 線圖 (Clip 保護)
+    // Panel 1: K 線圖
     ctx.save();
     ctx.beginPath();
     ctx.rect(chartLeft, p1Top - 10, chartWidth, p1H + 15);
@@ -780,7 +828,7 @@ function renderChart() {
     });
     ctx.stroke();
 
-    // Event Pins (交錯高度防重疊)
+    // Event Pins
     let pinCounter = 0;
     events.forEach(ev => {
         const idx = currentData.findIndex(d => d.date === ev.date);
@@ -822,7 +870,7 @@ function renderChart() {
     ctx.fillStyle = '#94a3b8';
     ctx.fillText('MSTR 股價 K 線 (日線)', chartLeft + 4, p1Top - 6);
 
-    // Panel 2: 增發直條圖 (Clip 保護)
+    // Panel 2: 增發直條圖
     ctx.save();
     ctx.beginPath();
     ctx.rect(chartLeft, p2Top - 8, chartWidth, p2H + 12);
@@ -875,22 +923,42 @@ function renderChart() {
         ctx.fillText('$' + b + 'B', chartRight + 6, yLine + 3);
     }
 
-    // Panel 3: mNAV (Clip 保護)
+    // Panel 3: mNAV (完整動態自適應刻度)
+    let curMaxMNav = 3.5;
+    let curMinMNav = 0.8;
+    currentData.forEach(d => {
+        if (d.basic_mnav && d.basic_mnav > curMaxMNav) curMaxMNav = d.basic_mnav;
+        if (d.diluted_mnav && d.diluted_mnav > curMaxMNav) curMaxMNav = d.diluted_mnav;
+        if (d.basic_mnav && d.basic_mnav < curMinMNav) curMinMNav = d.basic_mnav;
+        if (d.diluted_mnav && d.diluted_mnav < curMinMNav) curMinMNav = d.diluted_mnav;
+    });
+
+    const scaleMaxMNav = Math.max(4.5, Math.ceil(curMaxMNav * 1.15 * 2) / 2);
+    const scaleMinMNav = Math.max(0.0, Math.min(0.5, Math.floor(curMinMNav * 0.9 * 2) / 2));
+
+    const mnavToY = (m) => p3Top + p3H - 8 - ((m - scaleMinMNav) / (scaleMaxMNav - scaleMinMNav)) * (p3H - 22);
+
     ctx.save();
     ctx.beginPath();
-    ctx.rect(chartLeft, p3Top - 6, chartWidth, p3H + 12);
+    ctx.rect(chartLeft, p3Top - 4, chartWidth, p3H + 10);
     ctx.clip();
 
-    const maxMNav = 4.0, minMNav = 0.5;
-    const mnavToY = (m) => p3Top + p3H - ((m - minMNav) / (maxMNav - minMNav)) * (p3H - 10);
+    [1.0, 2.0, 3.0, 4.0, 5.0].forEach(m => {
+        if (m >= scaleMinMNav && m <= scaleMaxMNav) {
+            const yM = mnavToY(m);
+            if (m === 1.0) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.setLineDash([4, 4]);
+            } else {
+                ctx.strokeStyle = 'rgba(30, 41, 59, 0.7)';
+                ctx.setLineDash([]);
+            }
+            ctx.beginPath(); ctx.moveTo(chartLeft, yM); ctx.lineTo(chartRight, yM); ctx.stroke();
+            ctx.setLineDash([]);
+        }
+    });
 
-    const y1x = mnavToY(1.0);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath(); ctx.moveTo(chartLeft, y1x); ctx.lineTo(chartRight, y1x); ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1.8; ctx.beginPath();
+    ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2.0; ctx.beginPath();
     currentData.forEach((d, i) => {
         const x = chartLeft + i * step + step / 2;
         const y = mnavToY(d.basic_mnav);
@@ -898,7 +966,7 @@ function renderChart() {
     });
     ctx.stroke();
 
-    ctx.strokeStyle = '#ec4899'; ctx.lineWidth = 1.8; ctx.beginPath();
+    ctx.strokeStyle = '#ec4899'; ctx.lineWidth = 2.0; ctx.beginPath();
     currentData.forEach((d, i) => {
         const x = chartLeft + i * step + step / 2;
         const y = mnavToY(d.diluted_mnav);
@@ -907,17 +975,22 @@ function renderChart() {
     ctx.stroke();
     ctx.restore();
 
-    ctx.fillStyle = '#94a3b8'; ctx.textAlign = 'left';
-    ctx.fillText('mNAV 溢價倍數 (藍色: Basic, 粉色: Diluted)', chartLeft + 4, p3Top - 4);
+    ctx.fillStyle = '#94a3b8'; ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText('mNAV 溢價倍數 (天藍: 舊版 Basic, 亮粉: 新版 Diluted 完全稀釋)', chartLeft + 4, p3Top - 4);
     ctx.strokeStyle = '#1e293b'; ctx.beginPath();
     ctx.moveTo(chartLeft, p3Top + p3H); ctx.lineTo(chartRight, p3Top + p3H); ctx.stroke();
 
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillText('1.0x 基準', chartRight + 6, y1x + 3);
-    [2.0, 3.0].forEach(m => {
-        const yM = mnavToY(m);
-        ctx.fillStyle = '#64748b';
-        ctx.fillText(m + '.0x', chartRight + 6, yM + 3);
+    [1.0, 2.0, 3.0, 4.0, 5.0].forEach(m => {
+        if (m >= scaleMinMNav && m <= scaleMaxMNav) {
+            const yM = mnavToY(m);
+            if (m === 1.0) {
+                ctx.fillStyle = '#f8fafc';
+                ctx.fillText('1.0x (基準)', chartRight + 6, yM + 3);
+            } else {
+                ctx.fillStyle = '#64748b';
+                ctx.fillText(m.toFixed(1) + 'x', chartRight + 6, yM + 3);
+            }
+        }
     });
 
     // 底部 X 軸時間刻度
@@ -938,7 +1011,6 @@ function renderChart() {
         ctx.setLineDash([]);
     }
 
-    // Crosshair
     if (hoveredIndex >= 0 && hoveredIndex < n && !isDragging) {
         const x = chartLeft + hoveredIndex * step + step / 2;
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
@@ -1003,15 +1075,22 @@ function focusDate(targetDate) {
     }
 }
 
+// 手機寬度小於 768px 時預設顯示半年 (6M)，避免 K 棒太擠
+if (window.innerWidth <= 768) {
+    const total = rawData.length;
+    updateViewRange(total - 128, total - 1);
+    document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+    const btn6m = document.getElementById('btn6m');
+    if (btn6m) btn6m.classList.add('active');
+}
+
 initSize();
 </script>
 
 </body>
 </html>"""
 
-# -------------------------------------------------------------
-# 6. 安全替換並以 UTF-8-SIG (帶 BOM 標頭) 寫入檔案
-# -------------------------------------------------------------
+# 6. 安全替換並以 UTF-8-SIG 寫入 index.html
 final_html = html_template.replace(
     "__CANDLES_DATA__", json.dumps(candles, ensure_ascii=False)
 )
@@ -1033,4 +1112,4 @@ final_html = final_html.replace("__EVENT_COUNT__", str(len(base_events)))
 with open("index.html", "w", encoding="utf-8-sig") as f:
   f.write(final_html)
 
-print("✅ 成功生成純淨 UTF-8-SIG index.html，徹底解決亂碼與字串衝突！")
+print("✅ 成功生成最新版 index.html！包含最新手機端優化與動態 mNAV。")
