@@ -82,6 +82,37 @@
         .badge-green { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); }
         .badge-amber { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); }
         code { background: #0b1120; padding: 2px 5px; border-radius: 4px; color: #f472b6; font-family: monospace; font-size: 12px; }
+    
+        /* Mobile Responsive Layout */
+        @media (max-width: 768px) {
+            body { padding: 12px 8px; }
+            .header { margin-bottom: 12px; }
+            .header h1 { font-size: 18px; flex-direction: column; align-items: flex-start; gap: 4px; }
+            .header span.tag { font-size: 11px; }
+            .header p { font-size: 12px; }
+            
+            .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+            .stat-card { padding: 10px 12px; }
+            .stat-title { font-size: 11px; }
+            .stat-val { font-size: 17px; }
+            .stat-sub { font-size: 11px; }
+
+            .chart-box { padding: 10px 8px; border-radius: 8px; margin-bottom: 16px; }
+            .chart-toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
+            .legend-group { font-size: 11px; gap: 8px; justify-content: center; }
+            .btn-group { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; gap: 4px; }
+            .btn { padding: 6px 2px; font-size: 11px; text-align: center; }
+
+            .canvas-wrapper { height: 540px; }
+            .hint-bar { flex-direction: column; gap: 4px; font-size: 11px; }
+            
+            .grid-2col { grid-template-columns: 1fr; gap: 14px; }
+            .panel-card { padding: 14px 12px; }
+            .panel-card h2 { font-size: 15px; }
+            table { font-size: 11px; }
+            th, td { padding: 6px 8px; }
+        }
+
     </style>
 </head>
 <body>
@@ -140,6 +171,14 @@
                 <button class="btn" id="btnytd" onclick="setTimeframe('ytd')">今年 (YTD)</button>
                 <button class="btn active" id="btnall" onclick="setTimeframe('all')">全部歷史</button>
             </div>
+        </div>
+
+        
+        <!-- Mobile Interactive Info Bar -->
+        <div id="mobileInfoBar" style="background: #18243c; border: 1px solid #2b3d5d; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; font-size: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; min-height: 32px;">
+            <span id="mInfoDate" style="color: #38bdf8; font-weight: 700;">滑動圖表檢視每日數據</span>
+            <span id="mInfoPrice" style="color: #fff;"></span>
+            <span id="mInfoNav" style="color: #ec4899;"></span>
         </div>
 
         <div class="canvas-wrapper" id="canvasWrapper">
@@ -698,6 +737,62 @@ function focusDate(targetDate) {
             renderChart();
         }
     }
+}
+
+
+// -------------------------------------------------------------
+// 手機觸控事件 (Touch Support: 滑動看盤)
+// -------------------------------------------------------------
+const mInfoDate = document.getElementById('mInfoDate');
+const mInfoPrice = document.getElementById('mInfoPrice');
+const mInfoNav = document.getElementById('mInfoNav');
+
+function handleTouch(e) {
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const chartW = rect.width - 50;
+        const n = currentData.length;
+        const step = chartW / n;
+
+        if (x >= 5 && x <= chartW) {
+            hoveredIndex = Math.floor((x - 5) / step);
+            if (hoveredIndex >= n) hoveredIndex = n - 1;
+            if (hoveredIndex < 0) hoveredIndex = 0;
+            
+            const item = currentData[hoveredIndex];
+            const ev = events.find(e => e.date === item.date);
+            
+            // 更新手機頂部資訊看板
+            mInfoDate.innerText = item.date;
+            mInfoPrice.innerHTML = '收盤: <strong style="color:' + (item.close >= item.open ? '#10b981' : '#ef4444') + '">$' + item.close.toFixed(2) + '</strong>';
+            mInfoNav.innerHTML = '新mNAV: <strong>' + item.diluted_mnav.toFixed(2) + 'x</strong>' + (ev ? ' <span style="background:' + ev.color + '; color:#fff; padding:1px 5px; border-radius:3px; font-size:10px;">' + ev.badge + '</span>' : '');
+            
+            renderChart();
+        }
+    }
+}
+
+wrapper.addEventListener('touchstart', function(e) {
+    handleTouch(e);
+}, { passive: true });
+
+wrapper.addEventListener('touchmove', function(e) {
+    handleTouch(e);
+}, { passive: true });
+
+wrapper.addEventListener('touchend', function() {
+    // 保持最後一次觸摸點數據
+}, { passive: true });
+
+// 智慧手機端初始檢視區間: 手機寬度小於 768px 時預設顯示半年 (6M)，避免 K 棒太擠
+if (window.innerWidth <= 768) {
+    const total = rawData.length;
+    updateViewRange(total - 128, total - 1);
+    document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+    const btn6m = document.getElementById('btn6m');
+    if (btn6m) btn6m.classList.add('active');
 }
 
 initSize();
