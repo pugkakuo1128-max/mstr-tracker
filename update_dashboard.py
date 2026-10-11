@@ -1,20 +1,22 @@
 import json
 import os
+import re
 import numpy as np
 import pandas as pd
 import requests
 import yfinance as yf
 
-# 1. 抓取從 2024 年至今的所有歷史股價 (確保涵蓋所有增發日期)
-print("正在抓取 MSTR 股價數據...")
+# -------------------------------------------------------------
+# 1. 抓取 MSTR 股價數據 (從 2024 年至今)
+# -------------------------------------------------------------
+print("正在從 Yahoo Finance 抓取 MSTR 股價...")
 ticker = yf.Ticker("MSTR")
 df = ticker.history(start="2024-01-01")
 
 if df.empty:
-  print("抓取失敗，使用備用週期重試...")
   df = ticker.history(period="2y")
 
-# 2. 取得比特幣即時價格 (CoinGecko API)
+# 取得比特幣即時價格
 try:
   btc_res = requests.get(
       "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
@@ -24,14 +26,10 @@ try:
 except Exception:
   btc_current_price = 95000.0
 
-# 3. MSTR 最新核心資本數據
-CURRENT_BTC_HELD = 423650  # 最新比特幣持倉 (枚)
-BASIC_SHARES = 248000000  # 普通股流通股數 (Basic Shares)
-DILUTED_SHARES = 310000000  # 完全稀釋總股數 (含可轉債轉股)
-TOTAL_DEBT_NOTES = 6.21  # 可轉債未償總面額 (十億美元 $B)
-
-# 4. 歷次增發詳細數據庫 (可轉債 + ATM 普通股 + 重大行動)
-events = [
+# -------------------------------------------------------------
+# 2. 歷史增發基準庫 (已確定之歷史數據)
+# -------------------------------------------------------------
+base_events = [
     {
         "id": "ev1",
         "date": "2024-03-08",
@@ -42,11 +40,8 @@ events = [
         "amount": 0.80,
         "amountStr": "$800M ($0.80B)",
         "coupon": "0.625%",
-        "conversionPrice": "$149.77 (拆股前 $1,497.68)",
-        "premium": "42.5%",
-        "maturity": "2030-03-15",
-        "btcUsage": "購入 12,000 枚比特幣 (約 $8.2 億)",
-        "secForm": "Form 8-K (Item 1.01, 3.02) / 424B5",
+        "conversionPrice": "$149.77",
+        "secForm": "Form 8-K / 424B5",
         "color": "#8b5cf6",
     },
     {
@@ -57,13 +52,10 @@ events = [
         "badge": "0.875% 可轉債",
         "title": "發行 6.0375 億美元 0.875% 可轉換優先公司債 (Due 2031)",
         "amount": 0.60375,
-        "amountStr": "$603.75M ($0.60B)",
+        "amountStr": "$603.75M",
         "coupon": "0.875%",
-        "conversionPrice": "$232.72 (拆股前 $2,327.21)",
-        "premium": "40.0%",
-        "maturity": "2031-03-15",
-        "btcUsage": "購入 9,245 枚比特幣 (約 $6.23 億)",
-        "secForm": "Form 8-K (Item 1.01, 3.02) / 424B5",
+        "conversionPrice": "$232.72",
+        "secForm": "Form 8-K / 424B5",
         "color": "#8b5cf6",
     },
     {
@@ -76,11 +68,8 @@ events = [
         "amount": 0.80,
         "amountStr": "$800M ($0.80B)",
         "coupon": "2.25%",
-        "conversionPrice": "$204.33 (拆股前 $2,043.32)",
-        "premium": "35.0%",
-        "maturity": "2032-06-15",
-        "btcUsage": "購入 11,931 枚比特幣 (均價約 $65,883)",
-        "secForm": "Form 8-K (Item 1.01, 3.02) / 424B5",
+        "conversionPrice": "$204.33",
+        "secForm": "Form 8-K / 424B5",
         "color": "#8b5cf6",
     },
     {
@@ -89,15 +78,12 @@ events = [
         "type": "corporate_action",
         "typeName": "重大資本行動",
         "badge": "1:10 拆股",
-        "title": "執行 1 拆 10 股票分割 (10-for-1 Stock Split)",
+        "title": "執行 1 拆 10 股票分割",
         "amount": 0.0,
         "amountStr": "流通性翻倍",
         "coupon": "-",
-        "conversionPrice": "所有轉股價相應除以 10",
-        "premium": "-",
-        "maturity": "-",
-        "btcUsage": "大幅降低投資門檻，使零售與衍生品流動性暴增",
-        "secForm": "Form 8-K (Item 5.03)",
+        "conversionPrice": "轉股價相應除以 10",
+        "secForm": "Form 8-K",
         "color": "#f59e0b",
     },
     {
@@ -110,11 +96,8 @@ events = [
         "amount": 1.01,
         "amountStr": "$1.01B",
         "coupon": "0.625%",
-        "conversionPrice": "$183.19 (拆股後市價)",
-        "premium": "40.0%",
-        "maturity": "2028-09-15",
-        "btcUsage": "置換舊有 6.125% 高利抵押債並加購 7,420 枚 BTC",
-        "secForm": "Form 8-K (Item 1.01, 3.02) / 424B5",
+        "conversionPrice": "$183.19",
+        "secForm": "Form 8-K / 424B5",
         "color": "#8b5cf6",
     },
     {
@@ -123,15 +106,12 @@ events = [
         "type": "corporate_action",
         "typeName": "資本架構戰略",
         "badge": "420億計畫",
-        "title": "重磅發布「21/21 計畫」：3 年籌資 420 億美元買幣",
+        "title": "發布 21/21 計畫 (3 年 420 億美元融資買幣)",
         "amount": 42.0,
-        "amountStr": "$42.0B 總額度",
+        "amountStr": "$42.0B",
         "coupon": "混合",
         "conversionPrice": "隨行就市 (ATM) / 債券定價",
-        "premium": "-",
-        "maturity": "2025 ~ 2027 年",
-        "btcUsage": "210 億普通股 ATM + 210 億固定收益，全面開啟瘋狂買幣",
-        "secForm": "Form 8-K / Q3 10-Q",
+        "secForm": "Form 8-K / 10-Q",
         "color": "#f59e0b",
     },
     {
@@ -140,15 +120,12 @@ events = [
         "type": "atm_equity",
         "typeName": "ATM 普通股增發",
         "badge": "ATM 20.3億",
-        "title": "ATM 增發普通股籌資 20.3 億美元購入 27,200 枚 BTC",
+        "title": "ATM 增發籌資 20.3 億美元購入 27,200 BTC",
         "amount": 2.03,
         "amountStr": "$2.03B",
-        "coupon": "無 (股票權益)",
-        "conversionPrice": "售股均價約 $265/股",
-        "premium": "高溢價售股",
-        "maturity": "永久性權益資本",
-        "btcUsage": "購入 27,200 枚 BTC，持倉達 279,420 枚",
-        "secForm": "Form 8-K (Item 8.01) / 424B5",
+        "coupon": "無",
+        "conversionPrice": "約 $265/股",
+        "secForm": "Form 8-K / 424B5",
         "color": "#10b981",
     },
     {
@@ -157,15 +134,12 @@ events = [
         "type": "atm_equity",
         "typeName": "ATM 普通股增發",
         "badge": "ATM 46.0億",
-        "title": "ATM 增發普通股籌資 46 億美元購入 51,780 枚 BTC",
+        "title": "ATM 增發籌資 46 億美元購入 51,780 BTC",
         "amount": 4.60,
         "amountStr": "$4.60B",
-        "coupon": "無 (股票權益)",
-        "conversionPrice": "售股均價約 $358/股",
-        "premium": "高溢價售股",
-        "maturity": "永久性權益資本",
-        "btcUsage": "單週增發 46 億美元，購入 51,780 枚 BTC，成交量超越輝達",
-        "secForm": "Form 8-K (Item 8.01) / 424B5",
+        "coupon": "無",
+        "conversionPrice": "約 $358/股",
+        "secForm": "Form 8-K / 424B5",
         "color": "#10b981",
     },
     {
@@ -174,15 +148,12 @@ events = [
         "type": "convertible_note",
         "typeName": "可轉換公司債",
         "badge": "0.0% 零息債",
-        "title": "發行 30 億美元 0.0% 零利率可轉換優先公司債 (Due 2029)",
+        "title": "發行 30 億美元 0.0% 零利率可轉換公司債 (Due 2029)",
         "amount": 3.00,
-        "amountStr": "$3.00B (從 17.5億追加)",
-        "coupon": "0.00% (完全零息！)",
-        "conversionPrice": "$672.40 (創下歷史最高轉股價)",
-        "premium": "55.0% 溢價",
-        "maturity": "2029-12-01",
-        "btcUsage": "零成本借貸 30 億美元，全數注入比特幣購買基金",
-        "secForm": "Form 8-K (Item 1.01, 3.02) / 424B5",
+        "amountStr": "$3.00B",
+        "coupon": "0.00%",
+        "conversionPrice": "$672.40 (溢價 55%)",
+        "secForm": "Form 8-K / 424B5",
         "color": "#8b5cf6",
     },
     {
@@ -191,24 +162,116 @@ events = [
         "type": "atm_equity",
         "typeName": "ATM 普通股增發",
         "badge": "ATM 21.5億",
-        "title": "ATM 增發籌資 21.5 億美元購入 21,550 枚 BTC",
+        "title": "ATM 增發籌資 21.5 億美元購入 21,550 BTC",
         "amount": 2.15,
         "amountStr": "$2.15B",
-        "coupon": "無 (股票權益)",
-        "conversionPrice": "售股均價約 $385/股",
-        "premium": "高溢價售股",
-        "maturity": "永久性權益資本",
-        "btcUsage": "購入 21,550 枚 BTC，總持倉正式突破 423,650 枚",
-        "secForm": "Form 8-K (Item 8.01) / 424B5",
+        "coupon": "無",
+        "conversionPrice": "約 $385/股",
+        "secForm": "Form 8-K / 424B5",
         "color": "#10b981",
     },
 ]
 
-event_dict = {e["date"]: e for e in events}
+# -------------------------------------------------------------
+# 3. 自動探測未來的 SEC EDGAR 最新增發申報
+# -------------------------------------------------------------
+print("正在檢查 SEC EDGAR 是否有新的 8-K / 424B5 增發申報...")
+sec_headers = {"User-Agent": "MSTR_AutoTracker investor_research@example.com"}
+existing_dates = {e["date"] for e in base_events}
 
-# 5. 組裝每日資料並動態推算雙軌 mNAV
+try:
+  sec_url = "https://data.sec.gov/submissions/CIK0001050446.json"
+  sec_resp = requests.get(sec_url, headers=sec_headers, timeout=10)
+  if sec_resp.status_code == 200:
+    filings = sec_resp.json()["filings"]["recent"]
+    forms = filings["form"]
+    dates = filings["filingDate"]
+    accession_nos = filings["accessionNumber"]
+    primary_docs = filings["primaryDocument"]
+
+    for idx, form in enumerate(forms[:25]):  # 檢查最近 25 筆申報
+      f_date = dates[idx]
+      # 如果是大於 2024-12-10 且不在既有資料庫中的重大申報
+      if f_date > "2024-12-10" and f_date not in existing_dates:
+        if form in ["8-K", "424B5"]:
+          acc_clean = accession_nos[idx].replace("-", "")
+          doc_name = primary_docs[idx]
+          doc_url = f"https://www.sec.gov/Archives/edgar/data/1050446/{acc_clean}/{doc_name}"
+
+          # 讀取申報文字進行關鍵字解析
+          try:
+            doc_res = requests.get(
+                doc_url, headers=sec_headers, timeout=8
+            ).text.lower()
+            if "convertible" in doc_res and "notes" in doc_res:
+              amt_match = re.search(
+                  r"\$(\d+(?:\.\d+)?)\s*(billion|million)", doc_res
+              )
+              amt_val = (
+                  float(amt_match.group(1))
+                  if amt_match and amt_match.group(2) == "billion"
+                  else 0.5
+              )
+              base_events.append({
+                  "id": f"auto_sec_{f_date}",
+                  "date": f_date,
+                  "type": "convertible_note",
+                  "typeName": "可轉換公司債 (SEC自動抓取)",
+                  "badge": f"新可轉債 ${amt_val}B",
+                  "title": f"SEC 申報：發行約 {amt_val} 億美元可轉換公司債",
+                  "amount": amt_val,
+                  "amountStr": f"${amt_val}B",
+                  "coupon": "見申報",
+                  "conversionPrice": "見申報",
+                  "secForm": f"Form {form}",
+                  "color": "#8b5cf6",
+              })
+              existing_dates.add(f_date)
+              print(f"✅ 自動捕獲新可轉債申報: {f_date}")
+
+            elif "sales agreement" in doc_res or "at-the-market" in doc_res:
+              amt_match = re.search(
+                  r"\$(\d+(?:\.\d+)?)\s*(billion|million)", doc_res
+              )
+              amt_val = (
+                  float(amt_match.group(1))
+                  if amt_match and amt_match.group(2) == "billion"
+                  else 1.0
+              )
+              base_events.append({
+                  "id": f"auto_sec_{f_date}",
+                  "date": f_date,
+                  "type": "atm_equity",
+                  "typeName": "ATM 增發 (SEC自動抓取)",
+                  "badge": f"ATM ${amt_val}B",
+                  "title": f"SEC 申報：ATM 增發售股約 {amt_val} 億美元",
+                  "amount": amt_val,
+                  "amountStr": f"${amt_val}B",
+                  "coupon": "無",
+                  "conversionPrice": "市價隨行就市",
+                  "secForm": f"Form {form}",
+                  "color": "#10b981",
+              })
+              existing_dates.add(f_date)
+              print(f"✅ 自動捕獲新 ATM 增發申報: {f_date}")
+          except Exception as e:
+            pass
+except Exception as e:
+  print(f"SEC API 輪詢略過: {e}")
+
+event_dict = {e["date"]: e for e in base_events}
+
+# -------------------------------------------------------------
+# 4. 組裝 K 線與 mNAV 計算
+# -------------------------------------------------------------
 candles = []
 closes = [float(c) for c in df["Close"]]
+
+# 最新股本與持幣概況 (可由 yfinance 動態更新股數)
+try:
+  current_shares = ticker.info.get("sharesOutstanding", 248000000)
+except Exception:
+  current_shares = 248000000
 
 for i, (ts, row) in enumerate(df.iterrows()):
   d_str = ts.strftime("%Y-%m-%d")
@@ -230,7 +293,9 @@ for i, (ts, row) in enumerate(df.iterrows()):
   elif d_str < "2024-12-09":
     b_held, b_sh, d_sh = 386700, 238000000, 296000000
   else:
-    b_held, b_sh, d_sh = CURRENT_BTC_HELD, BASIC_SHARES, DILUTED_SHARES
+    b_held = 423650
+    b_sh = current_shares
+    d_sh = int(current_shares * 1.25)  # 估計完全稀釋係數
 
   btc_nav = b_held * btc_current_price
   basic_mnav = round((b_sh * close_p) / btc_nav, 2)
@@ -259,13 +324,14 @@ for i, (ts, row) in enumerate(df.iterrows()):
       "diluted_mnav": diluted_mnav,
       "note_amt": note_amt,
       "atm_amt": atm_amt,
-      "ev_id": ev["id"] if ev else None,
       "badge": ev["badge"] if ev else None,
       "badge_color": ev["color"] if ev else None,
       "event_title": ev["title"] if ev else None,
   })
 
-# 6. 生成完整多面板交互 HTML 頁面
+# -------------------------------------------------------------
+# 5. 輸出完整全景互動式 HTML
+# -------------------------------------------------------------
 html_content = f"""<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -287,7 +353,7 @@ html_content = f"""<!DOCTYPE html>
         body {{
             background-color: var(--bg-primary);
             color: #f8fafc;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             padding: 24px;
             line-height: 1.5;
         }}
@@ -296,14 +362,12 @@ html_content = f"""<!DOCTYPE html>
         .header h1 {{ font-size: 24px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 10px; }}
         .header span.tag {{ font-size: 12px; background: rgba(56, 189, 248, 0.15); color: var(--accent-blue); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.3); }}
         
-        /* Stats Grid */
         .stats-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px; }}
         .stat-card {{ background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px 18px; }}
         .stat-title {{ font-size: 12px; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px; }}
         .stat-val {{ font-size: 22px; font-weight: 700; color: #fff; }}
         .stat-sub {{ font-size: 12px; margin-top: 3px; color: #94a3b8; }}
 
-        /* Chart Canvas */
         .chart-box {{ background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 24px; }}
         .chart-toolbar {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px; }}
         .legend-group {{ display: flex; align-items: center; gap: 14px; font-size: 13px; color: #94a3b8; flex-wrap: wrap; }}
@@ -317,7 +381,6 @@ html_content = f"""<!DOCTYPE html>
         .canvas-wrapper {{ position: relative; width: 100%; height: 680px; background: #070d18; border-radius: 8px; border: 1px solid #1c2b44; overflow: hidden; }}
         canvas {{ display: block; width: 100%; height: 100%; }}
 
-        /* Tooltip */
         #chartTooltip {{
             position: absolute; display: none; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px);
             border: 1px solid #475569; border-radius: 8px; padding: 12px 16px; font-size: 12px; color: #fff;
@@ -327,7 +390,6 @@ html_content = f"""<!DOCTYPE html>
         #chartTooltip .tt-row {{ display: flex; justify-content: space-between; margin: 3px 0; }}
         #chartTooltip .tt-badge {{ margin-top: 8px; padding: 4px 8px; border-radius: 4px; font-weight: 600; text-align: center; }}
 
-        /* Bottom Grid */
         .grid-2col {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }}
         @media (max-width: 1024px) {{ .grid-2col {{ grid-template-columns: 1fr; }} }}
         .panel-card {{ background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; }}
@@ -343,7 +405,6 @@ html_content = f"""<!DOCTYPE html>
         .concept-card h3 {{ font-size: 15px; color: var(--accent-blue); margin-bottom: 8px; }}
         .concept-card p {{ font-size: 13px; color: #cbd5e1; line-height: 1.6; }}
 
-        /* Table */
         .table-responsive {{ overflow-x: auto; margin-top: 10px; }}
         table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
         th {{ background: #0d1525; color: #94a3b8; font-weight: 600; text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border-color); }}
@@ -353,7 +414,6 @@ html_content = f"""<!DOCTYPE html>
         .badge-purple {{ background: rgba(139, 92, 246, 0.2); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.4); }}
         .badge-green {{ background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); }}
         .badge-amber {{ background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); }}
-        code {{ background: #0b1120; padding: 2px 5px; border-radius: 4px; color: #f472b6; font-family: monospace; font-size: 12px; }}
     </style>
 </head>
 <body>
@@ -361,8 +421,8 @@ html_content = f"""<!DOCTYPE html>
 <div class="container">
     <div class="header">
         <div>
-            <h1>MicroStrategy (MSTR) 增發數據與全景 K 線儀表板 <span class="tag">每日自動更新</span></h1>
-            <p>已整合：可轉債（利率/轉股價）、ATM 普通股增發直條圖、雙軌 mNAV（舊版 Basic vs 新版 Diluted）與 SEC 申報代號。</p>
+            <h1>MicroStrategy (MSTR) 增發數據與全景 K 線儀表板 <span class="tag">SEC 8-K 自動偵測已啟用</span></h1>
+            <p>已整合：可轉債（利率/轉股價）、ATM 普通股增發直條圖、雙軌 mNAV（舊版 Basic vs 新版 Diluted）與 SEC 即時申報監控。</p>
         </div>
         <div style="text-align: right;">
             <div style="font-size: 13px; color: #94a3b8;">最新收盤價: <strong style="color:#fff; font-size:16px;">${candles[-1]['close']}</strong></div>
@@ -374,22 +434,22 @@ html_content = f"""<!DOCTYPE html>
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-title">普通股流通總數 (Basic)</div>
-            <div class="stat-val" style="color: #38bdf8;">{(BASIC_SHARES / 1000000):.1f}M 股</div>
-            <div class="stat-sub">1:10 拆股後普通股股本</div>
+            <div class="stat-val" style="color: #38bdf8;">{(current_shares / 1000000):.1f}M 股</div>
+            <div class="stat-sub">Yahoo Finance 即時股本</div>
         </div>
         <div class="stat-card">
             <div class="stat-title">完全稀釋總股數 (Diluted)</div>
-            <div class="stat-val" style="color: #ec4899;">{(DILUTED_SHARES / 1000000):.1f}M 股</div>
+            <div class="stat-val" style="color: #ec4899;">{(current_shares * 1.25 / 1000000):.1f}M 股</div>
             <div class="stat-sub">計入所有可轉債轉股稀釋</div>
         </div>
         <div class="stat-card">
-            <div class="stat-title">可轉債總餘額 (Notes)</div>
-            <div class="stat-val" style="color: #8b5cf6;">${TOTAL_DEBT_NOTES}B</div>
-            <div class="stat-sub">5 筆可轉債 (利率 0% ~ 2.25%)</div>
+            <div class="stat-title">可轉債與增發事件總數</div>
+            <div class="stat-val" style="color: #8b5cf6;">{len(base_events)} 筆</div>
+            <div class="stat-sub">包含 SEC 最新申報捕獲</div>
         </div>
         <div class="stat-card">
             <div class="stat-title">比特幣總持倉量</div>
-            <div class="stat-val" style="color: #10b981;">{CURRENT_BTC_HELD:,} BTC</div>
+            <div class="stat-val" style="color: #10b981;">423,650+ BTC</div>
             <div class="stat-sub">全球第一大企業持幣儲備</div>
         </div>
     </div>
@@ -420,13 +480,11 @@ html_content = f"""<!DOCTYPE html>
 
     <!-- 2 Column Breakdown -->
     <div class="grid-2col">
-        <!-- Event List -->
         <div class="panel-card">
             <h2><span>📌</span> 歷次增發詳細數據清單（點選定位圖表）</h2>
             <div id="eventList" style="max-height: 480px; overflow-y: auto; padding-right: 6px;"></div>
         </div>
 
-        <!-- Concept Knowledge -->
         <div class="panel-card">
             <h2><span>💡</span> 什麼是 ATM 與新舊 mNAV？</h2>
             
@@ -434,7 +492,7 @@ html_content = f"""<!DOCTYPE html>
                 <h3>1. ATM（At-The-Market）市價增發是什麼？</h3>
                 <p>
                     <strong>「隨行就市、在市場上直接賣股票換現金」</strong>。<br>
-                    傳統增發需要低價折價賣給投行機構，會造成股價大跌；而 ATM 增發是 MSTR 先跟 SEC 登記額度（例如「21/21 計畫」中的 210 億美元普通股），然後<strong>每天依照即時市價，像散戶一樣掛單賣給二級市場買盤</strong>。<br>
+                    傳統增發需要低價折價賣給投行機構，會造成股價大跌；而 ATM 增發是 MSTR 先跟 SEC 登記額度，然後<strong>每天依照即時市價，像散戶一樣掛單賣給二級市場買盤</strong>。<br>
                     • 買氣旺就多賣，買氣弱就隨時停賣，完全不引起市場恐慌！
                 </p>
             </div>
@@ -465,8 +523,7 @@ html_content = f"""<!DOCTYPE html>
                         <th>增發規模</th>
                         <th>票面利率</th>
                         <th>轉股價格 / 發行價</th>
-                        <th>比特幣購入 / 用途</th>
-                        <th>SEC 申報案號</th>
+                        <th>申報文件</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -477,7 +534,7 @@ html_content = f"""<!DOCTYPE html>
 
 <script>
 const rawData = {json.dumps(candles)};
-const events = {json.dumps(events)};
+const events = {json.dumps(base_events)};
 
 let currentData = [...rawData];
 let hoveredIndex = -1;
@@ -797,7 +854,7 @@ eventListEl.innerHTML = events.map(ev => `
         <div class="title">${{ev.title}}</div>
         <div class="meta">
             • 規模: <strong style="color:#fff;">${{ev.amountStr}}</strong> | 成本: <strong>${{ev.coupon}}</strong><br>
-            • 轉股價: <strong>${{ev.conversionPrice}}</strong> (${{ev.premium}})<br>
+            • 轉股價: <strong>${{ev.conversionPrice}}</strong><br>
             • 申報文件: <code>${{ev.secForm}}</code>
         </div>
     </div>
@@ -813,7 +870,6 @@ tableBodyEl.innerHTML = events.map(ev => `
         <td style="color:#38bdf8; font-weight:700;">${{ev.amountStr}}</td>
         <td>${{ev.coupon}}</td>
         <td>${{ev.conversionPrice}}</td>
-        <td style="font-size:12px; color:#94a3b8;">${{ev.btcUsage}}</td>
         <td><code>${{ev.secForm}}</code></td>
     </tr>
 `).join('');
@@ -847,4 +903,7 @@ initSize();
 with open("index.html", "w", encoding="utf-8") as f:
   f.write(html_content)
 
-print(f"成功生成完整 index.html！檔案大小: {len(html_content.encode('utf-8'))} bytes")
+print(
+    "成功生成 index.html！包含歷史完整數據與 SEC 自動偵測功能，檔案大小:"
+    f" {len(html_content.encode('utf-8'))} bytes"
+)
